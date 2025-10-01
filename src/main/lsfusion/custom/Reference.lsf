@@ -1,0 +1,10 @@
+MODULE Reference;
+
+REQUIRE MasterData;
+
+// объявляем "справочники" потавщиков, цвета сырья и группы сырья
+@defineNamedObject(partner, 'Поставщик');
+
+@defineNamedObject(materialColor, 'Цвет сырья');
+
+@defineNamedObject(materialGroup, 'Группа сырья');

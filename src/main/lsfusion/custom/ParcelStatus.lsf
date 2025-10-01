@@ -1,0 +1,41 @@
+MODULE ParcelStatus;
+
+REQUIRE Security, MasterData;
+
+NAMESPACE Parcel;
+
+// объявляем сущность статуса пакета с предопределенными значениями
+CLASS ParcelStatus 'Статус пакета' {
+    draft 'Черновик',
+    onStock 'На складе',
+    workshop 'Передан в цех',
+    production 'В производстве'
+}
+name (ParcelStatus s) = staticCaption(s) IF s IS ParcelStatus MATERIALIZED CHARWIDTH 15;
+
+// роли
+allow 'Разрешить' (UserRole r, ParcelStatus from, ParcelStatus to) = DATA BOOLEAN CHARWIDTH 20;
+
+// разрешено, если есть хоть одна роль
+allow (CustomUser u, ParcelStatus from, ParcelStatus to) = GROUP SUM 1 IF has(u, UserRole r) AND allow(r, from, to);
+
+// разрешено редактировать, если есть хоть один переход в другой статус
+editable (CustomUser u, ParcelStatus s) = GROUP SUM 1 IF has(u, UserRole r) AND allow(r, s, ParcelStatus to);
+readonly (ParcelStatus s) = s IS ParcelStatus AND NOT editable(currentUser(), s);
+
+FORM parcelStatusWorkflow 'Последовательность статусов'
+    OBJECTS r = UserRole PANEL
+    PROPERTIES(r) name SELECTOR
+
+    OBJECTS pst = ParcelStatus
+
+    OBJECTS psf = ParcelStatus
+    PROPERTIES(psf) READONLY name
+    PROPERTIES allow(r, psf, pst) COLUMNS (pst) HEADER name(pst)
+;
+
+NAVIGATOR {
+    masterData {
+        NEW parcelStatusWorkflow;
+    }
+}

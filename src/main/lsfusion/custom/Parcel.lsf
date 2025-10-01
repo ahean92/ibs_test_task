@@ -1,0 +1,224 @@
+MODULE Parcel;
+
+REQUIRE Security, Eval, Icon, 
+        Location, Reference,
+        ParcelStatus;
+
+CLASS Parcel 'Пакет';
+
+// номер
+number 'Номер' = DATA INTEGER (Parcel) INDEXED;
+maxNumber = GROUP MAX number(Parcel p);
+WHEN SET(Parcel p IS Parcel) AND NOT number(p) DO number(p) <- maxNumber() (+) 1; // автоматическое проставление при создании как +1 к максимальному
+
+// статус
+status = DATA ParcelStatus (Parcel) INDEXED;
+nameStatus 'Статус' (Parcel p) = name(status(p));
+WHEN LOCAL SET(Parcel p IS Parcel) AND NOT status(p) DO status(p) <- ParcelStatus.draft;
+
+// основные атрибуты
+partner = DATA Partner (Parcel) INDEXED;
+namePartner 'Поставщик' (Parcel p) = name(partner(p));
+
+numberInvoice 'Номер ТТН' = DATA STRING (Parcel);
+dateInvoice 'Дата ТТН' = DATA DATE (Parcel);
+
+dateReceived 'Дата приемки на склад' = DATA DATE (Parcel);
+WHEN SET(status(Parcel p) = ParcelStatus.onStock) DO dateReceived(p) <- currentDate(); // Автоматическое заполнение при переходе в статус «На складе»
+
+mass 'Масса' = DATA DOUBLE (Parcel);
+quantity 'Кол-во штук' = DATA INTEGER (Parcel);
+
+location = DATA Location (Parcel) INDEXED;
+nameLocation 'Подразделение' (Parcel p) = name(location(p));
+WHEN LOCAL SET(Parcel p IS Parcel) AND NOT location(p) DO location(p) <- firstStock(currentUser()); // При создании автоматически заполняется подразделением Кладовщика.
+
+CONSTRAINT SETCHANGED(location(Parcel p)) AND NOT access(location(p))
+           CHECKED BY location[Parcel]
+           MESSAGE 'Нет доступа к выбранному подразделению у текущего пользователя';
+
+// Проверки корректного заполнения обязательных полей при переходе на следующий шаг
+CONSTRAINT status(Parcel p) >= ParcelStatus.onStock AND NOT
+           (partner(p) AND numberInvoice(p) AND dateInvoice(p) AND mass(p) AND quantity(p) AND location(p))         
+           MESSAGE 'Заполнены не все обязательные поля при передаче на склад';
+
+// дополнительные атрибуты
+materialColor = DATA MaterialColor (Parcel);
+nameMaterialColor 'Цвет сырья' (Parcel p) = name(materialColor(p));
+
+materialGroup = DATA MaterialGroup (Parcel);
+nameMaterialGroup 'Группа сырья' (Parcel p) = name(materialGroup(p));
+
+// Проверки корректного заполнения обязательных полей при переходе на следующий шаг
+CONSTRAINT status(Parcel p) >= ParcelStatus.workshop AND NOT
+           (materialColor(p) AND materialGroup(p))
+           MESSAGE 'Заполнены не все обязательные поля при передаче в цех';
+
+note 'Примечание' = DATA STRING[100] (Parcel);
+
+//Должна быть проверка и невозможность смены статуса на «Передан в цех», если в этом поле указан склад, а не цех.
+CONSTRAINT status(Parcel p) >= ParcelStatus.workshop AND NOT workshop(location(p))
+    CHECKED BY location[Parcel]
+    MESSAGE 'Подразделение должно быть цехом при передаче в цех';
+
+worker = DATA CustomUser (Parcel);
+nameWorker 'Исполнитель' (Parcel p) = name(worker(p));
+
+// вспомогательные свойства для более короткого кода
+draft(Parcel p) = status(p) = ParcelStatus.draft;
+onStock(Parcel p) = status(p) = ParcelStatus.onStock;
+workshop(Parcel p) = status(p) = ParcelStatus.workshop;
+production(Parcel p) = status(p) = ParcelStatus.production;
+
+readonly(Parcel p) = readonly(status(p));
+
+// форма редактирования пакета
+FORM parcel 'Пакет'
+
+    OBJECTS p = Parcel PANEL
+    PROPERTIES(p) READONLY number, dateReceived, nameStatus
+    
+    PROPERTIES(p) BACKGROUND RGB(212,255,212) IF draft(p) AND NOT readonly(p) // подсвечиваем зеленым, если черновик и доступен для редактированию 
+                  READONLYIF readonly(p) OR NOT draft(p) // блокируем, если недоступен или не черновик
+                      namePartner, numberInvoice, dateInvoice // добавленные свойства на форму : поставщик, номер, дата 
+
+    PROPERTIES(p) BACKGROUND RGB(212,255,212) IF (draft(p) OR onStock(p)) AND NOT readonly(p) 
+                  READONLYIF readonly(p) OR (NOT draft(p) AND NOT onStock(p))
+                      mass, quantity
+
+    PROPERTIES(p) BACKGROUND RGB(212,255,212) IF onStock(p) AND NOT readonly(p) 
+                  READONLYIF readonly(p) OR NOT onStock(p)
+                      nameLocation, nameMaterialColor, nameMaterialGroup
+    
+    PROPERTIES(p) READONLYIF readonly(p) OR NOT onStock(p)
+                      note
+
+    PROPERTIES(p) BACKGROUND RGB(212,255,212) IF workshop(p) AND NOT readonly(p) 
+                  READONLYIF readonly(p) OR NOT workshop(p)
+                      nameWorker
+
+    EDIT Parcel OBJECT p
+;
+
+DESIGN parcel { // настраиваем дизайн формы
+    OBJECTS {
+        NEW header {
+            // первый горизонтальный контейнер
+            horizontal = TRUE;
+            NEW statuses {
+                horizontal = TRUE;
+                alignment = CENTER;
+                MOVE PROPERTY(nameStatus(p));
+            }
+            MOVE PROPERTY(nameLocation(p)) { alignment = CENTER; }
+        }
+        NEW pane {
+            // основная область
+            lines = 2; // в две колонки
+            NEW column1 {
+                NEW main {
+                    caption = 'Основные';
+                    MOVE PROPERTY(number(p));
+                    MOVE PROPERTY(dateReceived(p));
+                }
+                NEW receipt {
+                    caption = 'Поставка';
+                    MOVE PROPERTY(namePartner(p));
+                    NEW invoice {
+                        horizontal = TRUE;
+                        MOVE PROPERTY(numberInvoice(p));
+                        MOVE PROPERTY(dateInvoice(p));
+                    }
+                }
+                NEW quantity {
+                    caption = 'Количество';
+                    MOVE PROPERTY(mass(p));
+                    MOVE PROPERTY(quantity(p));
+                }
+            }
+            NEW column2 {
+                NEW pto {
+                    caption = 'ПТО';
+                    MOVE PROPERTY(nameMaterialColor(p));
+                    MOVE PROPERTY(nameMaterialGroup(p));
+                    MOVE PROPERTY(note(p));
+                }
+                NEW technologist {
+                    caption = 'Технолог';
+                    MOVE PROPERTY(nameWorker(p));
+                }
+            }
+        }
+    }
+    // убираем ненужные элементы
+    REMOVE TOOLBARLEFT;
+    REMOVE PROPERTY(formCancel());
+}
+
+FORM parcels 'Пакеты'
+
+    OBJECTS p = Parcel
+    PROPERTIES(p) READONLY number, dateReceived, nameStatus,
+                           namePartner, numberInvoice, dateInvoice,
+                           mass, quantity,
+                           nameLocation, nameMaterialColor, nameMaterialGroup,
+                           note,
+                           nameWorker
+            
+    PROPERTIES(p) NEWSESSION NEW SHOWIF NOT readonly(ParcelStatus.draft), // не показываем кнопку добавить, если пользователь не может переводить из статуса Черновик 
+                             EDIT, 
+                             DELETE SHOWIF NOT readonly(ParcelStatus.draft) 
+                                    DISABLEIF NOT draft(p) 
+
+    // Просмотр списка пакетов с учетом того, что каждый пользователь кроме Бизнес-Администратора «видит» только пакеты своего подразделения
+    FILTERS access(location(p))
+;
+
+DESIGN parcels {
+    BOX(p) { caption = ''; }
+    REMOVE TOOLBARBOX; // убираем нижний тулбар для большего места 
+}
+
+NAVIGATOR {
+    NEW parcels; // добавляем в "верхний" навигатор 
+}
+
+// Изменение статусов
+
+change (Parcel p, ParcelStatus to) {
+    APPLY; // сохраняем
+    IF canceled() THEN RETURN; // если сработало ограничение, то выходим
+
+    NEWSESSION {
+        status(p) <- to;
+        APPLY; // в отдельной сессии, чтобы откатилось, если ограничение сработает
+    }
+}
+
+EXTEND FORM parcel
+    OBJECTS to = ParcelStatus
+    PROPERTIES change(p, to) COLUMNS (to) HEADER name(to)
+    FILTERS allow(currentUser(), status(p), to)
+;
+
+DESIGN parcel {
+    statuses {
+        MOVE PROPERTY(change(p, to)) FIRST { valueClass = 'btn-primary'; }
+    }
+}
+
+// фильтр
+filterStatus = DATA LOCAL ParcelStatus ();
+nameFilterStatus () = name(filterStatus());
+
+EXTEND FORM parcels
+    PROPERTIES filterStatus '' = name(filterStatus()) // добавляем свойство фильтра наверх
+    
+    FILTERS status(p) = filterStatus() OR NOT filterStatus() // показываем только с выбранным значением, или все, если не задано
+;
+
+DESIGN parcels {
+    OBJECTS {
+        MOVE PROPERTY(filterStatus) FIRST;
+    }
+}
