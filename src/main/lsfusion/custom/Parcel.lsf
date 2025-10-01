@@ -1,7 +1,7 @@
 MODULE Parcel;
 
 REQUIRE Security, Eval, Icon, 
-        Location, Reference,
+        LocationCustom, Reference,
         ParcelStatus;
 
 CLASS Parcel 'Пакет';

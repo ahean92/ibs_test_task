@@ -1,6 +1,7 @@
 MODULE Reference;
 
 REQUIRE MasterData;
+//        Partner;
 
 // объявляем "справочники" потавщиков, цвета сырья и группы сырья
 @defineNamedObject(partner, 'Поставщик');

@@ -1,0 +1,4 @@
+MODULE MyCompanyCustom;
+
+REQUIRE Parcel;
+//        MyCompanyRu;

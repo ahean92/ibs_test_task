@@ -1,26 +1,26 @@
 MODULE LocationCustom;
 
 REQUIRE Security, MasterData;
+//        Location;
 
 // делаем справочник подразделений с признаком цех
 CLASS Location 'Подразделение';
 
 name 'Имя' = DATA ISTRING[100] (Location) CHARWIDTH 15;
-workshop 'Цех' = DATA BOOLEAN (Location);
 
 FORM location 'Подразделение'
-    OBJECTS o = Location PANEL
-    PROPERTIES(o) name, workshop
-    
-    EDIT Location OBJECT o
+    OBJECTS l = Location PANEL
+    PROPERTIES(l) name
+
+    EDIT Location OBJECT l
 ;
 
 FORM locations 'Подразделения'
-    OBJECTS o = Location
-    PROPERTIES(o) READONLY name, workshop
-    PROPERTIES(o) NEWSESSION NEW, EDIT, DELETE
+    OBJECTS l = Location
+    PROPERTIES(l) READONLY name
+    PROPERTIES(l) NEWSESSION NEW, EDIT, DELETE
 
-    LIST Location OBJECT o
+    LIST Location OBJECT l
 ;
 
 NAVIGATOR {
@@ -28,6 +28,19 @@ NAVIGATOR {
         NEW locations;
     }
 }
+
+// добавляем признак цех
+workshop 'Цех' = DATA BOOLEAN (Location);
+
+EXTEND FORM location
+    PROPERTIES(l) workshop
+;
+
+//DESIGN location {
+//    params {
+//        MOVE PROPERTY(workshop(l));
+//    }
+//}
 
 // подразделение кладовщика
 in (CustomUser u, Location l) = DATA BOOLEAN; // означает, что пользователю доступно подразделение
